@@ -59,3 +59,11 @@ Alphabetical listing of Python files in this repository:
 - **tst_perplex.py**: Example of using Perplexity AI's API for image analysis.
 
 - **tst_rag.py**: Implementation of Retrieval-Augmented Generation using Google's DataGemma model.
+
+## TODO
+
+- [ ] Credit where credit is due (i.e. add links to original sources)
+- [ ] Fix broken examples (e.g. tst_rag.py)
+- [ ] Cleanup code
+- [ ] Cleanup requirements.txt
+- [ ] Add more examples
