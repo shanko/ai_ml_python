@@ -54,7 +54,7 @@ def analyze_image_with_perplexity(image_path, prompt):
          return None
 
 # Example usage:
-image_path = "/Users/shashankdate/code/lang/py/PrivateCompanies.jpeg"
+image_path = "./PrivateCompanies.jpeg"
 prompt = "Describe the objects and scene in this image."
 analysis_result = analyze_image_with_perplexity(image_path, prompt)
 
