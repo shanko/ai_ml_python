@@ -6,6 +6,8 @@ A collection of AI/ML tools and examples using Python.
 
 Alphabetical listing of Python files in this repository:
 
+- **img2txt_openai.py**: Script that converts images to structured text using OpenAI's GPT-4o model. Processes images into JSON format based on a predefined schema.
+
 - **mcp_client.py**: Client implementation for MCP (Model Control Protocol) to connect to a proxy server.
 
 - **mcp_server.py**: Server implementation for MCP (Model Control Protocol) with demo tools and resources.
@@ -43,6 +45,8 @@ Alphabetical listing of Python files in this repository:
 - **tst_lottery_lg.py**: LangGraph example for lottery-related processing.
 
 - **tst_marathi_gen.py**: Script for generating text in Marathi language.
+
+- **tst_nvidia.py**: Example of using NVIDIA's API to interact with the Llama 3.1 Nemotron 70B model for text generation.
 
 - **tst_ollama_1.py**: Ollama API usage example #1 with prompt engineering.
 
