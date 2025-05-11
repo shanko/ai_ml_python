@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft/2020-12/schema",
+  "title": "Todo List Name",
+  "description": "Name of the List",
+  "type": "object",
+  "properties": {
+    "title": {
+      "description": "Name",
+      "type": "string"
+    },
+    "date": {
+      "description": "date of the doc",
+      "type": "string",
+      "format": "MM/YY"
+    },
+    "items": {
+      "type": "array",
+      "description": "List of items",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rank": { "type": "number" },
+          "description": { "type": "string" },
+          "subtext": { "type": "string" },
+          "dueDate": { "type": "string", "format": "MM/YY - MM/YY"}
+        },
+        "required": ["rank", "description"]
+      }
+    }
+  },
+  "required": ["title", "date","items"]
+}

@@ -1,0 +1,66 @@
+{
+    "title": "To-Do List",
+    "date": "03/05",
+    "items": [
+        {
+            "rank": 1,
+            "description": "Check with Electrical Engineer",
+            "subtext": "",
+            "dueDate": ""
+        },
+        {
+            "rank": 2,
+            "description": "Coordinate with Construction Team",
+            "subtext": "",
+            "dueDate": ""
+        },
+        {
+            "rank": 3,
+            "description": "Gather Mechanical Info",
+            "subtext": "",
+            "dueDate": ""
+        },
+        {
+            "rank": 4,
+            "description": "Revise Technical Documents",
+            "subtext": "",
+            "dueDate": ""
+        },
+        {
+            "rank": 5,
+            "description": "Schedule April Meetings",
+            "subtext": "",
+            "dueDate": ""
+        },
+        {
+            "rank": 6,
+            "description": "Discuss Changes",
+            "subtext": "Shit's Late!",
+            "dueDate": ""
+        },
+        {
+            "rank": 7,
+            "description": "Update Pricing",
+            "subtext": "Everything's Fuckin' Expensive...",
+            "dueDate": ""
+        },
+        {
+            "rank": 8,
+            "description": "The Sun Eater: Empire of Silence",
+            "subtext": "by Christopher Ruocchio",
+            "dueDate": ""
+        },
+        {
+            "rank": 9,
+            "description": "Order Planet Comic-Con Tix",
+            "subtext": "Purchase before 03/11",
+            "dueDate": ""
+        },
+        {
+            "rank": 10,
+            "description": "Meal Prep for Next Week",
+            "subtext": "",
+            "dueDate": "03/10 - 03/17"
+        }
+    ]
+}
