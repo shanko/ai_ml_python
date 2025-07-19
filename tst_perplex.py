@@ -16,7 +16,8 @@ def analyze_image_with_perplexity(image_path, prompt):
     """
     try:
         api_key = os.getenv("PERPLEXITY_API_KEY", "default_api_key")
-        print("PERPLEXITY API Key:", api_key)
+        # print("PERPLEXITY API Key:", api_key)
+
         with open(image_path, "rb") as image_file:
             image_data = base64.b64encode(image_file.read()).decode("utf-8")
     except FileNotFoundError:
