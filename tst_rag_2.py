@@ -33,4 +33,3 @@ def rag_query(user_query):
 
 # 4. Usage
 print(rag_query("How does RAG work with Ollama?"))
-

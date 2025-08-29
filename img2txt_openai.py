@@ -19,7 +19,7 @@ with open(image_path, 'rb') as image_file:
     image_base64 = base64.b64encode(image_file.read()).decode('utf-8')
 
 response = client.chat.completions.create(
-    model='gpt-4o' ,
+    model='gpt-5' ,
     response_format={"type": "json_object"},
     messages=[
         {
@@ -36,7 +36,8 @@ response = client.chat.completions.create(
             ]
         }
     ],
-    max_tokens=16000,
+#    max_tokens=16000,
+    max_completion_tokens=16000,
 )
 
 content = response.choices[0].message.content

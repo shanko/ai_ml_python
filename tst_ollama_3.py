@@ -16,6 +16,9 @@ response = requests.post(url, headers=headers, data=json.dumps(data))
 
 if response.status_code == 200:
     print(response)
-    # print(response.json())
+    resp_data = response.json()
+    if 'response' in resp_data:
+        print("Ollama Response:")
+        print(resp_data['response'])
 else:
     print(f"Request failed with status code: {response.status_code}")

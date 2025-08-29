@@ -13,9 +13,11 @@ client = OpenAI(
     base_url="https://api.perplexity.ai"
 )
 
+
+##https://www.kcdc.info/agenda#sz-tab-45883
 prompt = '''
-  Extract ALL events from this page which satisfy the condition: 'INTEREST = Hackathon'. 
-  For each event, return the name, date in YYYY-MM-DD format, location, interest, and description from: https://www.torontotechweek.com/calendar
+  Extract ALL events from this page which satisfy the condition: 'INTEREST = Cloud'. 
+  For each event, return the name, date in YYYY-MM-DD format, location, interest, and description from: https://www.kcdc.info/agenda#sz-tab-45883
   List the events chronologically in CSV format with no other extra verbiage befor or after the list.
 '''
 
