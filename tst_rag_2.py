@@ -15,7 +15,8 @@ documents = [
 ]
 for doc in documents:
     embedding = embedder.encode(doc["content"])
-    collection.add(documents=[doc["id"]], embeddings=[embedding], metadatas=[doc])
+    collection.add( documents=[doc["id"]], embeddings=[embedding],
+                    metadatas=[doc], ids=["1"] )
 
 # 3. Query pipeline: embed, retrieve, and generate answer
 def rag_query(user_query):
@@ -28,8 +29,8 @@ def rag_query(user_query):
 
     # Call Ollama LLM
     prompt = f"Context: {context}\n\nQuestion: {user_query}\n\nAnswer:"
-    resp = ollama.generate(model=MODEL_NAME, prompt=prompt, options={"temperature": 0.2})
+    resp = ollama.generate(model=MODEL_NAME, prompt=prompt, options={"temperature": 0.0})
     return resp["response"]
 
 # 4. Usage
-print(rag_query("How does RAG work with Ollama?"))
+print(rag_query("How does RAG (Retrieval Augmented Generation) work with Ollama?"))
