@@ -16,9 +16,10 @@ client = OpenAI(
 
 ##https://www.kcdc.info/agenda#sz-tab-45883
 prompt = '''
-  Extract ALL events from this page which satisfy the condition: 'INTEREST = Cloud'. 
-  For each event, return the name, date in YYYY-MM-DD format, location, interest, and description from: https://www.kcdc.info/agenda#sz-tab-45883
-  List the events chronologically in CSV format with no other extra verbiage befor or after the list.
+  Extract ALL events from this page which talk about CX architecture
+  For each event, return the name, date in YYYY-MM-DD format, location, interest, and description from:
+  https://www.humanx.co/tracks#builders-info
+  List the events chronologically in CSV format with no other extra verbiage before or after the list.
 '''
 
 response = client.chat.completions.create(
