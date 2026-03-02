@@ -155,6 +155,7 @@ TRAINING_DATA = [
 ]
 
 TEST_PROMPT = "Who are you and what can you help me with?"
+SEP = '=' * 55
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +207,25 @@ def generate(model, tokenizer, instruction: str, max_new_tokens: int = 80) -> st
     # Slice off the prompt tokens so we only decode the model's new output
     new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
     return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+
+
+def print_section(title: str) -> None:
+    """Print a titled section header with separators."""
+    print(f"\n{SEP}")
+    print(title)
+    print(SEP)
+
+
+def run_inference(model, tokenizer, label: str) -> tuple[str, float]:
+    """Run generate() on TEST_PROMPT, print results, return (text, elapsed_seconds)."""
+    print_section(f"{label} fine-tuning")
+    print(f"Prompt: {TEST_PROMPT}\n")
+    t0 = time.perf_counter()
+    response = generate(model, tokenizer, TEST_PROMPT)
+    t_elapsed = time.perf_counter() - t0
+    print(f"Response:\n{response}")
+    print(f"  [{t_elapsed:.1f}s]")
+    return response, t_elapsed
 
 
 def train(model, tokenizer, data: list[tuple], epochs: int, lr: float = 3e-4):
@@ -318,15 +338,7 @@ def main():
     print(f"  done  [{t_load:.1f}s]  (dtype: {dtype})")
 
     # --- BEFORE ---
-    print(f"\n{'='*55}")
-    print("BEFORE fine-tuning")
-    print(f"{'='*55}")
-    print(f"Prompt: {TEST_PROMPT}\n")
-    t0 = time.perf_counter()
-    before = generate(model, tokenizer, TEST_PROMPT)
-    t_before = time.perf_counter() - t0
-    print(f"Response:\n{before}")
-    print(f"  [{t_before:.1f}s]\n")
+    before, t_before = run_inference(model, tokenizer, "BEFORE")
 
     # --- Attach LoRA adapter ---
     #
@@ -358,26 +370,14 @@ def main():
     print(f"  total training [{t_train:.1f}s]")
 
     # --- AFTER ---
-    print(f"\n{'='*55}")
-    print("AFTER fine-tuning")
-    print(f"{'='*55}")
-    print(f"Prompt: {TEST_PROMPT}\n")
-    t0 = time.perf_counter()
-    after = generate(model, tokenizer, TEST_PROMPT)
-    t_after = time.perf_counter() - t0
-    print(f"Response:\n{after}")
-    print(f"  [{t_after:.1f}s]\n")
+    after, t_after = run_inference(model, tokenizer, "AFTER")
 
     # --- Side-by-side summary ---
-    print(f"{'='*55}")
-    print("SUMMARY")
-    print(f"{'='*55}")
+    print_section("SUMMARY")
     print(f"BEFORE:\n{before}")
     print(f"\nAFTER:\n{after}")
 
-    print(f"\n{'='*55}")
-    print("TIMING")
-    print(f"{'='*55}")
+    print_section("TIMING")
     print(f"  Platform           : {platform_label}")
     print(f"  Model load         : {t_load:.1f}s")
     print(f"  Inference (before) : {t_before:.1f}s")
