@@ -86,6 +86,28 @@ python task_description_agent_advanced.py
 
 The advanced version automatically creates `config/` directory with `agents.yaml` and `tasks.yaml` files.
 
+### Advanced Parallel Mode (Multi-Agent, Multi-Task)
+
+The advanced agent supports parallel execution across multiple input tasks via `--parallel`.
+
+- Uses **`InterpreterPoolExecutor` on Python 3.14+** when available
+- Falls back to **`ThreadPoolExecutor`** on earlier Python versions
+- Executes the YAML-configured **multi-agent, multi-task** workflow per input task
+
+Run in parallel mode:
+
+```bash
+python task_description_agent_advanced.py --parallel
+```
+
+You can combine parallel mode with provider selection:
+
+```bash
+python task_description_agent_advanced.py --parallel --cloud perplexity
+python task_description_agent_advanced.py --parallel --cloud openai
+python task_description_agent_advanced.py --parallel --ollama llama3.2
+```
+
 ## Project Structure
 
 ```
@@ -141,7 +163,12 @@ The advanced version follows CrewAI best practices by separating configuration f
 Defines agent roles, goals, and backstories
 
 ### tasks.yaml
-Defines task descriptions and expected outputs
+Defines task descriptions, expected outputs, and agent routing.
+
+Current sample config demonstrates multi-task routing:
+- `description_generation_task` → `description_specialist`
+- `technical_scope_task` → `scope_analyst`
+- `risk_considerations_task` → `risk_analyst`
 
 This approach makes it easier to:
 - Modify agent behavior without changing code

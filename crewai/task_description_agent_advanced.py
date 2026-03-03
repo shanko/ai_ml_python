@@ -8,7 +8,14 @@ import os
 import argparse
 import yaml
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from crewai import Agent, Task, Crew, LLM
+
+try:
+    # Python 3.14+
+    from concurrent.futures import InterpreterPoolExecutor
+except ImportError:
+    InterpreterPoolExecutor = None
 
 
 class AdvancedTaskDescriptionGenerator:
@@ -149,6 +156,39 @@ class AdvancedTaskDescriptionGenerator:
         return result.raw
 
 
+def _parallel_worker(one_line_task: str, config_dir: str, model: str) -> tuple[str, str]:
+    """Worker used by the parallel demo to run one full multi-agent/multi-task execution."""
+    generator = AdvancedTaskDescriptionGenerator(config_dir=config_dir, model=model)
+    result = generator.generate_description(one_line_task)
+    return one_line_task, result
+
+
+def run_parallel_demo(example_tasks: list[str], model: str, config_dir: str = "config") -> None:
+    """Demonstrate parallel execution across multiple task inputs."""
+    executor_cls = InterpreterPoolExecutor if InterpreterPoolExecutor else ThreadPoolExecutor
+    executor_name = "InterpreterPoolExecutor (Python 3.14+)" if InterpreterPoolExecutor else "ThreadPoolExecutor fallback"
+
+    print(f"\n⚡ Parallel demo enabled using {executor_name}")
+    print("=" * 70)
+
+    with executor_cls(max_workers=min(len(example_tasks), 4)) as executor:
+        futures = {
+            executor.submit(_parallel_worker, task, config_dir, model): task
+            for task in example_tasks
+        }
+
+        for future in as_completed(futures):
+            task = futures[future]
+            print(f"\n📋 One-line Task: {task}")
+            print("-" * 70)
+            try:
+                _, description = future.result()
+                print(f"📝 Generated Description:\n{description}")
+            except Exception as exc:
+                print(f"❌ Task failed: {exc}")
+            print("=" * 70)
+
+
 def create_example_configs():
     """Create example YAML configuration files."""
     
@@ -165,6 +205,20 @@ def create_example_configs():
 into well-structured, clear descriptions. You excel at understanding the intent 
 behind a task and providing context, scope, and actionable details. Your descriptions 
 are clear, professional, and easy to understand."""
+        },
+        "scope_analyst": {
+            "role": "Technical Scope Analyst",
+            "goal": "Define implementation scope, architecture boundaries, and dependencies for proposed tasks",
+            "backstory": """You are a senior engineer who breaks high-level requests into practical implementation scope.
+You identify affected components, integration points, constraints, and delivery boundaries.
+Your output is concise, technically grounded, and useful for planning execution."""
+        },
+        "risk_analyst": {
+            "role": "Delivery and Risk Analyst",
+            "goal": "Identify delivery, quality, and operational risks and propose realistic mitigations",
+            "backstory": """You are experienced in engineering risk analysis for software projects.
+You proactively spot failure modes, tradeoffs, and rollout concerns before implementation starts.
+Your recommendations balance speed, quality, and production safety."""
         }
     }
     
@@ -180,6 +234,20 @@ Keep it to 2-4 sentences maximum.
 Task: {task}""",
             "expected_output": "A well-structured short description (2-4 sentences) that expands on the one-line explanation",
             "agent": "description_specialist"
+        },
+        "technical_scope_task": {
+            "description": """For the task below, identify technical scope and implementation boundaries.
+Include likely components, dependencies, and constraints in 3-5 bullet points.
+Task: {task}""",
+            "expected_output": "A concise technical scope with components, dependencies, and constraints",
+            "agent": "scope_analyst"
+        },
+        "risk_considerations_task": {
+            "description": """For the task below, list key risks and mitigations.
+Focus on delivery risk, quality risk, and operational risk.
+Task: {task}""",
+            "expected_output": "A short risk-and-mitigation summary tailored to the task",
+            "agent": "risk_analyst"
         }
     }
     
@@ -205,6 +273,11 @@ def main():
         type=str,
         help="Use cloud provider: perplexity (default), openai, or specify model with provider=model (e.g., perplexity=sonar-pro)",
         default="perplexity"
+    )
+    parser.add_argument(
+        "--parallel",
+        action="store_true",
+        help="Run multiple input tasks in parallel (uses Python 3.14 InterpreterPoolExecutor when available)"
     )
     args = parser.parse_args()
     
@@ -263,14 +336,17 @@ def main():
     print("=" * 70)
     print("Advanced CrewAI Task Description Generator")
     print("=" * 70)
-    
-    for task in example_tasks:
-        print(f"\n📋 One-line Task: {task}")
-        print("-" * 70)
-        
-        description = generator.generate_description(task)
-        print(f"📝 Generated Description:\n{description}")
-        print("=" * 70)
+
+    if args.parallel:
+        run_parallel_demo(example_tasks=example_tasks, model=model, config_dir="config")
+    else:
+        for task in example_tasks:
+            print(f"\n📋 One-line Task: {task}")
+            print("-" * 70)
+
+            description = generator.generate_description(task)
+            print(f"📝 Generated Description:\n{description}")
+            print("=" * 70)
 
 
 if __name__ == "__main__":
@@ -287,6 +363,11 @@ if __name__ == "__main__":
         type=str,
         help="Use cloud provider: perplexity (default), openai, or specify model with provider=model (e.g., perplexity=sonar-pro)",
         default="perplexity"
+    )
+    parser.add_argument(
+        "--parallel",
+        action="store_true",
+        help="Run multiple input tasks in parallel (uses Python 3.14 InterpreterPoolExecutor when available)"
     )
     args = parser.parse_args()
     

@@ -1,0 +1,24 @@
+description_generation_task:
+  description: |
+    Generate a comprehensive short description based on the one-line task explanation provided.
+    The description should include: what needs to be done, why it matters, and any key considerations.
+    Keep it to 2-4 sentences maximum.
+    Task: {task}
+  expected_output: A well-structured short description (2-4 sentences) that expands on the one-line explanation
+  agent: description_specialist
+
+technical_scope_task:
+  description: |
+    For the task below, identify technical scope and implementation boundaries.
+    Include likely components, dependencies, and constraints in 3-5 bullet points.
+    Task: {task}
+  expected_output: A concise technical scope with components, dependencies, and constraints
+  agent: scope_analyst
+
+risk_considerations_task:
+  description: |
+    For the task below, list key risks and mitigations.
+    Focus on delivery risk, quality risk, and operational risk.
+    Task: {task}
+  expected_output: A short risk-and-mitigation summary tailored to the task
+  agent: risk_analyst
