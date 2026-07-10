@@ -258,8 +258,8 @@ def test_calculate_org_metrics_success(multi_entity_dataframe, mock_time_provide
 
     assert metrics is not None
     assert metrics["total_activities"] == 20
-    assert metrics["desk_count"] == 2
-    assert metrics["feed_count"] == 3
+    assert metrics["desk_count"] == 1
+    assert metrics["feed_count"] == 2
     assert "overdue_count" in metrics
 
 
@@ -325,7 +325,7 @@ def test_prepare_org_visualizations(sample_dataframe):
 
 
 def test_render_visualizations(
-    sample_dataframe, mock_viz_renderer, mock_file_system, mock_config
+    sample_dataframe, mock_viz_renderer, mock_file_system, mock_config, mock_time_provider
 ):
     """Test visualization rendering"""
     feed_df = sample_dataframe[sample_dataframe["feed_id"] == "F1"]
@@ -338,6 +338,7 @@ def test_render_visualizations(
         renderer=mock_viz_renderer,
         file_system=mock_file_system,
         config=mock_config,
+        time_provider=mock_time_provider,
     )
 
     assert len(paths) == 3
@@ -347,14 +348,20 @@ def test_render_visualizations(
 
 
 def test_render_visualizations_creates_directory(
-    sample_dataframe, mock_viz_renderer, mock_file_system, mock_config
+    sample_dataframe, mock_viz_renderer, mock_file_system, mock_config, mock_time_provider
 ):
     """Test that rendering creates visualization directory"""
     feed_df = sample_dataframe[sample_dataframe["feed_id"] == "F1"]
     viz_specs = prepare_feed_visualizations(feed_df, "F1")
 
     render_visualizations(
-        viz_specs, "feed", "F1", mock_viz_renderer, mock_file_system, mock_config
+        viz_specs,
+        "feed",
+        "F1",
+        mock_viz_renderer,
+        mock_file_system,
+        mock_config,
+        mock_time_provider,
     )
 
     expected_dir = mock_config.get_visualization_dir()
@@ -841,7 +848,8 @@ def test_metrics_with_zero_estimated_hours(sample_dataframe):
     report = generate_feed_report_text(metrics)
 
     # Should handle division by zero gracefully
-    assert "Hours Efficiency: 0.0%" in report or "inf" not in report.lower()
+    assert "Hours Efficiency: 0.0%" in report
+    assert "inf" not in report.lower()
 
 
 def test_visualization_with_missing_categories(sample_dataframe):

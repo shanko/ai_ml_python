@@ -417,6 +417,7 @@ def render_visualizations(
     renderer: VisualizationRenderer,
     file_system: FileSystemInterface,
     config: ConfigProvider,
+    time_provider: TimeProvider,
 ) -> list[str]:
     """
     Render and save visualizations based on specifications.
@@ -428,16 +429,15 @@ def render_visualizations(
         renderer: Visualization renderer
         file_system: File system for saving
         config: Configuration provider
+        time_provider: Time provider for deterministic timestamps
 
     Returns:
         List of file paths where visualizations were saved
     """
-    from datetime import datetime
-
     viz_dir = config.get_visualization_dir()
     file_system.mkdir(viz_dir)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = time_provider.now().strftime("%Y%m%d_%H%M%S")
     viz_paths = []
 
     for idx, spec in enumerate(viz_specs):
@@ -663,6 +663,7 @@ def generate_canned_report_node(state: AgentState, deps: Dependencies) -> AgentS
             renderer=deps.viz_renderer,
             file_system=deps.file_system,
             config=deps.config,
+            time_provider=deps.time_provider,
         )
 
         state["report_content"] = report_text

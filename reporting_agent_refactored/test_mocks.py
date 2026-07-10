@@ -12,7 +12,7 @@ from typing import Any
 import pandas as pd
 from io import StringIO
 
-from .interfaces import (
+from reporting_agent_refactored.interfaces import (
     TimeProvider,
     FileSystemInterface,
     LLMInterface,

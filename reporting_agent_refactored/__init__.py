@@ -38,6 +38,13 @@ from .reporting_agent_refactored import (
     prepare_data_summary,
     format_dict,
     format_activities,
+    prepare_feed_visualizations,
+    prepare_desk_visualizations,
+    prepare_org_visualizations,
+    render_visualizations,
+    generate_canned_report_node,
+    generate_custom_report_node,
+    route_report_type,
 )
 
 __all__ = [
@@ -72,6 +79,15 @@ __all__ = [
     # Utilities
     "format_dict",
     "format_activities",
+    # Visualization
+    "prepare_feed_visualizations",
+    "prepare_desk_visualizations",
+    "prepare_org_visualizations",
+    "render_visualizations",
+    # Graph nodes / routing
+    "generate_canned_report_node",
+    "generate_custom_report_node",
+    "route_report_type",
 ]
 
 __version__ = "2.0.0"
