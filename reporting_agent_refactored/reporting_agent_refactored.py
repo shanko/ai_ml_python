@@ -20,6 +20,7 @@ ASSUMPTIONS:
 8. Complexity values are: 'simple', 'moderate', 'complex' (case-insensitive)
 """
 
+import logging
 import sys
 from typing import TypedDict, Literal, Any
 from dataclasses import dataclass
@@ -36,6 +37,8 @@ from .interfaces import (
     VisualizationRenderer,
     ConfigProvider,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ==================== DATA STRUCTURES ====================
@@ -125,7 +128,15 @@ def load_data(state: AgentState, file_system: FileSystemInterface) -> AgentState
         # aggregations downstream; categorical columns are cast to string
         # so .str.lower() works even for numeric or all-NaN input.
         for col in ["percent_complete", "estimated_hours", "hours_spent"]:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+            coerced = pd.to_numeric(df[col], errors="coerce")
+            bad_count = int(coerced.isna().sum())
+            if bad_count:
+                logger.warning(
+                    "Column %r: %d missing/invalid value(s) coerced to 0",
+                    col,
+                    bad_count,
+                )
+            df[col] = coerced.fillna(0.0)
         df["priority"] = df["priority"].astype("string").str.lower()
         df["complexity"] = df["complexity"].astype("string").str.lower()
         df["start_date"] = pd.to_datetime(df["start_date"], errors="coerce")
@@ -248,8 +259,14 @@ def calculate_org_metrics(
         "feed_count": org_df["feed_id"].nunique(),
         "avg_completion": org_df["percent_complete"].mean(),
         "desk_stats": desk_stats,
-        "high_priority_count": len(org_df[org_df["priority"] == "high"]),
-        "complex_count": len(org_df[org_df["complexity"] == "complex"]),
+        # fillna(False): with nullable string dtype, comparing missing
+        # values yields NA, and NA in a boolean mask raises on pandas < 3
+        "high_priority_count": len(
+            org_df[(org_df["priority"] == "high").fillna(False)]
+        ),
+        "complex_count": len(
+            org_df[(org_df["complexity"] == "complex").fillna(False)]
+        ),
         "overdue_count": overdue_count,
     }
 
@@ -280,7 +297,9 @@ def prepare_feed_visualizations(
     )
 
     pivot = pd.crosstab(feed_df["priority"], feed_df["complexity"])
-    pivot = pivot.reindex(priority_order, axis=0).reindex(
+    # fill_value on both axes keeps the pivot integer-typed when a
+    # category is absent; NaN rows would break the heatmap's fmt="d"
+    pivot = pivot.reindex(priority_order, axis=0, fill_value=0).reindex(
         complexity_order, axis=1, fill_value=0
     )
 
@@ -330,7 +349,9 @@ def prepare_desk_visualizations(
     )
 
     pivot = pd.crosstab(desk_df["priority"], desk_df["complexity"])
-    pivot = pivot.reindex(priority_order, axis=0).reindex(
+    # fill_value on both axes keeps the pivot integer-typed when a
+    # category is absent; NaN rows would break the heatmap's fmt="d"
+    pivot = pivot.reindex(priority_order, axis=0, fill_value=0).reindex(
         complexity_order, axis=1, fill_value=0
     )
 
@@ -380,7 +401,9 @@ def prepare_org_visualizations(
     )
 
     pivot = pd.crosstab(org_df["priority"], org_df["complexity"])
-    pivot = pivot.reindex(priority_order, axis=0).reindex(
+    # fill_value on both axes keeps the pivot integer-typed when a
+    # category is absent; NaN rows would break the heatmap's fmt="d"
+    pivot = pivot.reindex(priority_order, axis=0, fill_value=0).reindex(
         complexity_order, axis=1, fill_value=0
     )
 
@@ -704,7 +727,10 @@ def generate_canned_report_node(state: AgentState, deps: Dependencies) -> AgentS
             time_provider=deps.time_provider,
         )
 
+        # Commit viz paths before saving the report text so a write
+        # failure doesn't discard references to already-rendered charts
         state["report_content"] = report_text
+        state["visualization_paths"] = viz_paths
         state["report_path"] = save_report_text(
             report_text=report_text,
             level=report_type,
@@ -713,7 +739,6 @@ def generate_canned_report_node(state: AgentState, deps: Dependencies) -> AgentS
             config=deps.config,
             time_provider=deps.time_provider,
         )
-        state["visualization_paths"] = viz_paths
 
     except Exception as e:
         state["error"] = f"Report generation failed: {str(e)}"
@@ -769,15 +794,17 @@ Include specific metrics, trends, and recommendations where applicable.
 
         response = deps.llm.invoke(messages)
         state["report_content"] = response.content
-        state["report_path"] = save_report_text(
-            report_text=response.content,
-            level="custom",
-            entity_id=None,
-            file_system=deps.file_system,
-            config=deps.config,
-            time_provider=deps.time_provider,
-        )
         state["visualization_paths"] = []
+        # Don't write a file for an empty LLM response
+        if response.content:
+            state["report_path"] = save_report_text(
+                report_text=response.content,
+                level="custom",
+                entity_id=None,
+                file_system=deps.file_system,
+                config=deps.config,
+                time_provider=deps.time_provider,
+            )
 
     except Exception as e:
         state["error"] = f"Custom report generation failed: {str(e)}"
@@ -859,6 +886,13 @@ def run_report(
     # Validate inputs
     if report_type != "custom" and not entity_id:
         return {"error": "entity_id required for canned reports"}
+
+    # entity_id is embedded in output filenames; reject path separators
+    # and traversal segments so writes can't escape the output directory
+    if entity_id and (
+        "/" in entity_id or "\\" in entity_id or entity_id in (".", "..")
+    ):
+        return {"error": f"Invalid entity_id: {entity_id!r}"}
 
     if report_type == "custom" and not custom_query:
         return {"error": "custom_query required for custom reports"}
