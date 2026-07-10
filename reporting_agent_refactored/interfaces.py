@@ -41,6 +41,11 @@ class FileSystemInterface(ABC):
         pass
 
     @abstractmethod
+    def write_text(self, path: Path, content: str) -> None:
+        """Write text content to a file"""
+        pass
+
+    @abstractmethod
     def path_exists(self, path: Path) -> bool:
         """Check if a path exists"""
         pass

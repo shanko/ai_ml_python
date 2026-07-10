@@ -65,6 +65,10 @@ class MockFileSystem(FileSystemInterface):
             raise FileNotFoundError(f"No mock data loaded for {path}")
         return self.csv_data[path].copy()
 
+    def write_text(self, path: Path, content: str) -> None:
+        """Record text file write in memory"""
+        self.files[str(path)] = content
+
     def path_exists(self, path: Path) -> bool:
         """Check if path exists in mock file system"""
         return path in self.directories or str(path) in self.files

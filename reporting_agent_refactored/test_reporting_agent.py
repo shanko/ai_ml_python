@@ -200,6 +200,67 @@ def test_load_data_normalizes_columns(mock_file_system):
     assert all(result["df"]["complexity"].str.islower())
 
 
+def test_load_data_coerces_non_numeric_values():
+    """Test that non-numeric values in numeric columns are coerced to 0"""
+    fs = MockFileSystem()
+    dirty_df = create_test_dataframe()
+    dirty_df["percent_complete"] = dirty_df["percent_complete"].astype(object)
+    dirty_df["hours_spent"] = dirty_df["hours_spent"].astype(object)
+    dirty_df.loc[0, "percent_complete"] = "not-a-number"
+    dirty_df.loc[1, "estimated_hours"] = None
+    dirty_df.loc[2, "hours_spent"] = ""
+    fs.load_csv_data("dirty.csv", dirty_df)
+
+    state = {
+        "csv_path": "dirty.csv",
+        "df": pd.DataFrame(),
+        "report_type": "feed",
+        "entity_id": "F1",
+        "custom_query": None,
+        "report_content": "",
+        "visualization_paths": [],
+        "error": None,
+    }
+
+    result = load_data(state, fs)
+
+    assert result["error"] is None
+    assert result["df"]["percent_complete"].iloc[0] == 0.0
+    assert result["df"]["estimated_hours"].iloc[1] == 0.0
+    assert result["df"]["hours_spent"].iloc[2] == 0.0
+
+    # Downstream aggregation and formatting must not crash on coerced data
+    metrics = calculate_feed_metrics(result["df"], "F1")
+    assert metrics is not None
+    report = generate_feed_report_text(metrics)
+    assert "FEED REPORT" in report
+
+
+def test_load_data_handles_non_string_categoricals():
+    """Test that numeric or all-NaN priority/complexity don't crash .str.lower()"""
+    fs = MockFileSystem()
+    odd_df = create_test_dataframe()
+    odd_df["priority"] = 1  # numeric column
+    odd_df["complexity"] = None  # all-NaN column
+    fs.load_csv_data("odd.csv", odd_df)
+
+    state = {
+        "csv_path": "odd.csv",
+        "df": pd.DataFrame(),
+        "report_type": "feed",
+        "entity_id": "F1",
+        "custom_query": None,
+        "report_content": "",
+        "visualization_paths": [],
+        "error": None,
+    }
+
+    result = load_data(state, fs)
+
+    assert result["error"] is None
+    assert all(result["df"]["priority"] == "1")
+
+
 # ==================== TEST METRIC CALCULATIONS ====================
 
 
@@ -567,6 +628,53 @@ def test_generate_custom_report_success(dependencies, sample_dataframe):
     assert dependencies.llm.get_call_count() == 1
 
 
+def test_generate_canned_report_saves_report_text(dependencies, sample_dataframe):
+    """Test that canned report text is persisted to the output directory"""
+    state = {
+        "csv_path": "test.csv",
+        "df": sample_dataframe,
+        "report_type": "feed",
+        "entity_id": "F1",
+        "custom_query": None,
+        "report_content": "",
+        "visualization_paths": [],
+        "error": None,
+    }
+
+    result = generate_canned_report_node(state, dependencies)
+
+    assert result["error"] is None
+    assert result["report_path"] is not None
+    assert result["report_path"].endswith(".txt")
+    # Timestamp comes from the injected MockTimeProvider (2024-01-15 10:00)
+    assert "20240115_100000" in result["report_path"]
+    # Saved content matches the report content
+    saved_content = dependencies.file_system.files[result["report_path"]]
+    assert saved_content == result["report_content"]
+
+
+def test_generate_custom_report_saves_report_text(dependencies, sample_dataframe):
+    """Test that custom report text is persisted to the output directory"""
+    state = {
+        "csv_path": "test.csv",
+        "df": sample_dataframe,
+        "report_type": "custom",
+        "entity_id": None,
+        "custom_query": "What are the top priorities?",
+        "report_content": "",
+        "visualization_paths": [],
+        "error": None,
+    }
+
+    result = generate_custom_report_node(state, dependencies)
+
+    assert result["error"] is None
+    assert result["report_path"] is not None
+    assert "custom_report" in result["report_path"]
+    saved_content = dependencies.file_system.files[result["report_path"]]
+    assert saved_content == result["report_content"]
+
+
 def test_generate_custom_report_no_llm(sample_dataframe):
     """Test custom report without LLM configured"""
     deps = Dependencies(
@@ -765,6 +873,8 @@ def test_run_report_with_dependencies(dependencies):
     assert result["error"] is None
     assert result["report_content"] != ""
     assert "FEED REPORT" in result["report_content"]
+    assert result["report_path"] is not None
+    assert result["report_path"].endswith(".txt")
     assert len(result["visualization_paths"]) == 3
 
 
