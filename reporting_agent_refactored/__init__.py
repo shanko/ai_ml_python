@@ -42,6 +42,7 @@ from .reporting_agent_refactored import (
     prepare_desk_visualizations,
     prepare_org_visualizations,
     render_visualizations,
+    save_report_text,
     generate_canned_report_node,
     generate_custom_report_node,
     route_report_type,
@@ -84,6 +85,7 @@ __all__ = [
     "prepare_desk_visualizations",
     "prepare_org_visualizations",
     "render_visualizations",
+    "save_report_text",
     # Graph nodes / routing
     "generate_canned_report_node",
     "generate_custom_report_node",

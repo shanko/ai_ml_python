@@ -47,6 +47,10 @@ class RealFileSystem(FileSystemInterface):
         """Read a CSV file from disk"""
         return pd.read_csv(path)
 
+    def write_text(self, path: Path, content: str) -> None:
+        """Write text content to a file on disk"""
+        path.write_text(content)
+
     def path_exists(self, path: Path) -> bool:
         """Check if a path exists on disk"""
         return path.exists()

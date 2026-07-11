@@ -20,6 +20,7 @@ ASSUMPTIONS:
 8. Complexity values are: 'simple', 'moderate', 'complex' (case-insensitive)
 """
 
+import logging
 import sys
 from typing import TypedDict, Literal, Any
 from dataclasses import dataclass
@@ -37,6 +38,8 @@ from .interfaces import (
     ConfigProvider,
 )
 
+logger = logging.getLogger(__name__)
+
 
 # ==================== DATA STRUCTURES ====================
 
@@ -50,6 +53,7 @@ class AgentState(TypedDict):
     entity_id: str | None
     custom_query: str | None
     report_content: str
+    report_path: str | None
     visualization_paths: list[str]
     error: str | None
 
@@ -119,9 +123,22 @@ def load_data(state: AgentState, file_system: FileSystemInterface) -> AgentState
             state["error"] = f"Missing columns: {missing}"
             return state
 
-        # Clean and normalize data
-        df["priority"] = df["priority"].str.lower()
-        df["complexity"] = df["complexity"].str.lower()
+        # Clean and normalize data. Numeric columns are coerced so that
+        # non-numeric or empty values become 0 instead of crashing
+        # aggregations downstream; categorical columns are cast to string
+        # so .str.lower() works even for numeric or all-NaN input.
+        for col in ["percent_complete", "estimated_hours", "hours_spent"]:
+            coerced = pd.to_numeric(df[col], errors="coerce")
+            bad_count = int(coerced.isna().sum())
+            if bad_count:
+                logger.warning(
+                    "Column %r: %d missing/invalid value(s) coerced to 0",
+                    col,
+                    bad_count,
+                )
+            df[col] = coerced.fillna(0.0)
+        df["priority"] = df["priority"].astype("string").str.lower()
+        df["complexity"] = df["complexity"].astype("string").str.lower()
         df["start_date"] = pd.to_datetime(df["start_date"], errors="coerce")
         df["end_date"] = pd.to_datetime(df["end_date"], errors="coerce")
 
@@ -242,8 +259,14 @@ def calculate_org_metrics(
         "feed_count": org_df["feed_id"].nunique(),
         "avg_completion": org_df["percent_complete"].mean(),
         "desk_stats": desk_stats,
-        "high_priority_count": len(org_df[org_df["priority"] == "high"]),
-        "complex_count": len(org_df[org_df["complexity"] == "complex"]),
+        # fillna(False): with nullable string dtype, comparing missing
+        # values yields NA, and NA in a boolean mask raises on pandas < 3
+        "high_priority_count": len(
+            org_df[(org_df["priority"] == "high").fillna(False)]
+        ),
+        "complex_count": len(
+            org_df[(org_df["complexity"] == "complex").fillna(False)]
+        ),
         "overdue_count": overdue_count,
     }
 
@@ -274,7 +297,9 @@ def prepare_feed_visualizations(
     )
 
     pivot = pd.crosstab(feed_df["priority"], feed_df["complexity"])
-    pivot = pivot.reindex(priority_order, axis=0).reindex(
+    # fill_value on both axes keeps the pivot integer-typed when a
+    # category is absent; NaN rows would break the heatmap's fmt="d"
+    pivot = pivot.reindex(priority_order, axis=0, fill_value=0).reindex(
         complexity_order, axis=1, fill_value=0
     )
 
@@ -324,7 +349,9 @@ def prepare_desk_visualizations(
     )
 
     pivot = pd.crosstab(desk_df["priority"], desk_df["complexity"])
-    pivot = pivot.reindex(priority_order, axis=0).reindex(
+    # fill_value on both axes keeps the pivot integer-typed when a
+    # category is absent; NaN rows would break the heatmap's fmt="d"
+    pivot = pivot.reindex(priority_order, axis=0, fill_value=0).reindex(
         complexity_order, axis=1, fill_value=0
     )
 
@@ -374,7 +401,9 @@ def prepare_org_visualizations(
     )
 
     pivot = pd.crosstab(org_df["priority"], org_df["complexity"])
-    pivot = pivot.reindex(priority_order, axis=0).reindex(
+    # fill_value on both axes keeps the pivot integer-typed when a
+    # category is absent; NaN rows would break the heatmap's fmt="d"
+    pivot = pivot.reindex(priority_order, axis=0, fill_value=0).reindex(
         complexity_order, axis=1, fill_value=0
     )
 
@@ -469,6 +498,38 @@ def render_visualizations(
         viz_paths.append(str(path))
 
     return viz_paths
+
+
+def save_report_text(
+    report_text: str,
+    level: str,
+    entity_id: str | None,
+    file_system: FileSystemInterface,
+    config: ConfigProvider,
+    time_provider: TimeProvider,
+) -> str:
+    """
+    Persist report text to the configured output directory.
+
+    Args:
+        report_text: Report content to save
+        level: Report level (feed/desk/org/custom)
+        entity_id: Entity identifier (None for custom reports)
+        file_system: File system for saving
+        config: Configuration provider
+        time_provider: Time provider for deterministic timestamps
+
+    Returns:
+        Path where the report was saved, as a string
+    """
+    output_dir = config.get_output_dir()
+    file_system.mkdir(output_dir)
+
+    timestamp = time_provider.now().strftime("%Y%m%d_%H%M%S")
+    entity_part = f"{entity_id}_" if entity_id else ""
+    path = output_dir / f"{level}_{entity_part}report_{timestamp}.txt"
+    file_system.write_text(path, report_text)
+    return str(path)
 
 
 # ==================== REPORT GENERATION ====================
@@ -666,8 +727,18 @@ def generate_canned_report_node(state: AgentState, deps: Dependencies) -> AgentS
             time_provider=deps.time_provider,
         )
 
+        # Commit viz paths before saving the report text so a write
+        # failure doesn't discard references to already-rendered charts
         state["report_content"] = report_text
         state["visualization_paths"] = viz_paths
+        state["report_path"] = save_report_text(
+            report_text=report_text,
+            level=report_type,
+            entity_id=entity_id,
+            file_system=deps.file_system,
+            config=deps.config,
+            time_provider=deps.time_provider,
+        )
 
     except Exception as e:
         state["error"] = f"Report generation failed: {str(e)}"
@@ -724,6 +795,16 @@ Include specific metrics, trends, and recommendations where applicable.
         response = deps.llm.invoke(messages)
         state["report_content"] = response.content
         state["visualization_paths"] = []
+        # Don't write a file for an empty LLM response
+        if response.content:
+            state["report_path"] = save_report_text(
+                report_text=response.content,
+                level="custom",
+                entity_id=None,
+                file_system=deps.file_system,
+                config=deps.config,
+                time_provider=deps.time_provider,
+            )
 
     except Exception as e:
         state["error"] = f"Custom report generation failed: {str(e)}"
@@ -800,11 +881,18 @@ def run_report(
         deps: Dependency container (uses defaults if not provided)
 
     Returns:
-        dict with keys: report_content, visualization_paths, error
+        dict with keys: report_content, report_path, visualization_paths, error
     """
     # Validate inputs
     if report_type != "custom" and not entity_id:
         return {"error": "entity_id required for canned reports"}
+
+    # entity_id is embedded in output filenames; reject path separators
+    # and traversal segments so writes can't escape the output directory
+    if entity_id and (
+        "/" in entity_id or "\\" in entity_id or entity_id in (".", "..")
+    ):
+        return {"error": f"Invalid entity_id: {entity_id!r}"}
 
     if report_type == "custom" and not custom_query:
         return {"error": "custom_query required for custom reports"}
@@ -840,6 +928,7 @@ def run_report(
         "entity_id": entity_id,
         "custom_query": custom_query,
         "report_content": "",
+        "report_path": None,
         "visualization_paths": [],
         "error": None,
     }
@@ -850,6 +939,7 @@ def run_report(
 
     return {
         "report_content": final_state["report_content"],
+        "report_path": final_state.get("report_path"),
         "visualization_paths": final_state["visualization_paths"],
         "error": final_state["error"],
     }
@@ -913,6 +1003,9 @@ def main():
         sys.exit(1)
 
     print(result["report_content"])
+
+    if result["report_path"]:
+        print(f"\nReport saved to: {result['report_path']}")
 
     if result["visualization_paths"]:
         print(f"\nVisualizations saved to:")

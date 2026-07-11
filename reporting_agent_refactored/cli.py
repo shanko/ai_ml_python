@@ -135,6 +135,10 @@ Examples:
     print(result["report_content"])
     print("=" * 70)
 
+    # Print saved report path
+    if result["report_path"]:
+        print(f"\n📄 Report saved: {result['report_path']}", file=sys.stderr)
+
     # Print visualization info
     if result["visualization_paths"]:
         print(f"\n📊 Visualizations saved:", file=sys.stderr)

@@ -200,6 +200,135 @@ def test_load_data_normalizes_columns(mock_file_system):
     assert all(result["df"]["complexity"].str.islower())
 
 
+def test_load_data_coerces_non_numeric_values():
+    """Test that non-numeric values in numeric columns are coerced to 0"""
+    fs = MockFileSystem()
+    dirty_df = create_test_dataframe()
+    dirty_df["percent_complete"] = dirty_df["percent_complete"].astype(object)
+    dirty_df["hours_spent"] = dirty_df["hours_spent"].astype(object)
+    dirty_df.loc[0, "percent_complete"] = "not-a-number"
+    dirty_df.loc[1, "estimated_hours"] = None
+    dirty_df.loc[2, "hours_spent"] = ""
+    fs.load_csv_data("dirty.csv", dirty_df)
+
+    state = {
+        "csv_path": "dirty.csv",
+        "df": pd.DataFrame(),
+        "report_type": "feed",
+        "entity_id": "F1",
+        "custom_query": None,
+        "report_content": "",
+        "visualization_paths": [],
+        "error": None,
+    }
+
+    result = load_data(state, fs)
+
+    assert result["error"] is None
+    assert result["df"]["percent_complete"].iloc[0] == 0.0
+    assert result["df"]["estimated_hours"].iloc[1] == 0.0
+    assert result["df"]["hours_spent"].iloc[2] == 0.0
+
+    # Downstream aggregation and formatting must not crash on coerced data
+    metrics = calculate_feed_metrics(result["df"], "F1")
+    assert metrics is not None
+    report = generate_feed_report_text(metrics)
+    assert "FEED REPORT" in report
+
+
+def test_load_data_handles_non_string_categoricals():
+    """Test that numeric or all-NaN priority/complexity don't crash .str.lower()"""
+    fs = MockFileSystem()
+    odd_df = create_test_dataframe()
+    odd_df["priority"] = 1  # numeric column
+    odd_df["complexity"] = None  # all-NaN column
+    fs.load_csv_data("odd.csv", odd_df)
+
+    state = {
+        "csv_path": "odd.csv",
+        "df": pd.DataFrame(),
+        "report_type": "feed",
+        "entity_id": "F1",
+        "custom_query": None,
+        "report_content": "",
+        "visualization_paths": [],
+        "error": None,
+    }
+
+    result = load_data(state, fs)
+
+    assert result["error"] is None
+    assert all(result["df"]["priority"] == "1")
+
+
+def test_load_data_warns_on_coerced_values(caplog):
+    """Test that coercion of invalid/missing numeric values is logged"""
+    fs = MockFileSystem()
+    dirty_df = create_test_dataframe()
+    dirty_df["hours_spent"] = dirty_df["hours_spent"].astype(object)
+    dirty_df.loc[0, "hours_spent"] = "oops"
+    dirty_df.loc[1, "hours_spent"] = None
+    fs.load_csv_data("dirty.csv", dirty_df)
+
+    state = {
+        "csv_path": "dirty.csv",
+        "df": pd.DataFrame(),
+        "report_type": "feed",
+        "entity_id": "F1",
+        "custom_query": None,
+        "report_content": "",
+        "visualization_paths": [],
+        "error": None,
+    }
+
+    with caplog.at_level("WARNING", logger="reporting_agent_refactored"):
+        result = load_data(state, fs)
+
+    assert result["error"] is None
+    assert any(
+        "hours_spent" in record.message and "2" in record.message
+        for record in caplog.records
+    )
+
+
+def test_org_metrics_with_missing_categoricals(mock_time_provider):
+    """Test org metrics don't crash on NaN priority/complexity after load_data"""
+    fs = MockFileSystem()
+    df = create_multi_entity_dataframe()
+    df.loc[0:4, "priority"] = None
+    df.loc[5:9, "complexity"] = None
+    fs.load_csv_data("gaps.csv", df)
+
+    state = {
+        "csv_path": "gaps.csv",
+        "df": pd.DataFrame(),
+        "report_type": "org",
+        "entity_id": "O1",
+        "custom_query": None,
+        "report_content": "",
+        "visualization_paths": [],
+        "error": None,
+    }
+
+    loaded = load_data(state, fs)
+    assert loaded["error"] is None
+
+    metrics = calculate_org_metrics(loaded["df"], "O1", mock_time_provider)
+
+    assert metrics is not None
+    # O1 rows are low/medium priority and simple/moderate complexity;
+    # the NaN entries must count as non-matches, not crash the mask
+    assert metrics["high_priority_count"] == 0
+    assert metrics["complex_count"] == 0
+
+    # The heatmap pivot must stay integer-typed (no NaN rows/cols from
+    # missing categories) or seaborn's fmt="d" annotation crashes
+    specs = prepare_org_visualizations(metrics["org_df"], "O1")
+    heatmap_data = specs[2].data
+    assert not heatmap_data.isna().any().any()
+    assert (heatmap_data.dtypes == "int64").all()
+
+
 # ==================== TEST METRIC CALCULATIONS ====================
 
 
@@ -567,6 +696,114 @@ def test_generate_custom_report_success(dependencies, sample_dataframe):
     assert dependencies.llm.get_call_count() == 1
 
 
+def test_generate_canned_report_saves_report_text(dependencies, sample_dataframe):
+    """Test that canned report text is persisted to the output directory"""
+    state = {
+        "csv_path": "test.csv",
+        "df": sample_dataframe,
+        "report_type": "feed",
+        "entity_id": "F1",
+        "custom_query": None,
+        "report_content": "",
+        "visualization_paths": [],
+        "error": None,
+    }
+
+    result = generate_canned_report_node(state, dependencies)
+
+    assert result["error"] is None
+    assert result["report_path"] is not None
+    assert result["report_path"].endswith(".txt")
+    # Timestamp comes from the injected MockTimeProvider (2024-01-15 10:00)
+    assert "20240115_100000" in result["report_path"]
+    # Saved content matches the report content
+    saved_content = dependencies.file_system.files[result["report_path"]]
+    assert saved_content == result["report_content"]
+
+
+def test_generate_custom_report_saves_report_text(dependencies, sample_dataframe):
+    """Test that custom report text is persisted to the output directory"""
+    state = {
+        "csv_path": "test.csv",
+        "df": sample_dataframe,
+        "report_type": "custom",
+        "entity_id": None,
+        "custom_query": "What are the top priorities?",
+        "report_content": "",
+        "visualization_paths": [],
+        "error": None,
+    }
+
+    result = generate_custom_report_node(state, dependencies)
+
+    assert result["error"] is None
+    assert result["report_path"] is not None
+    assert "custom_report" in result["report_path"]
+    saved_content = dependencies.file_system.files[result["report_path"]]
+    assert saved_content == result["report_content"]
+
+
+def test_canned_report_write_failure_preserves_viz_paths(
+    mock_time_provider, mock_llm, mock_viz_renderer, mock_config, sample_dataframe
+):
+    """Test that a report-text write failure doesn't discard rendered chart paths"""
+
+    class FailingWriteFileSystem(MockFileSystem):
+        def write_text(self, path, content):
+            raise OSError("disk full")
+
+    deps = Dependencies(
+        time_provider=mock_time_provider,
+        file_system=FailingWriteFileSystem(),
+        llm=mock_llm,
+        viz_renderer=mock_viz_renderer,
+        config=mock_config,
+    )
+
+    state = {
+        "csv_path": "test.csv",
+        "df": sample_dataframe,
+        "report_type": "feed",
+        "entity_id": "F1",
+        "custom_query": None,
+        "report_content": "",
+        "visualization_paths": [],
+        "error": None,
+    }
+
+    result = generate_canned_report_node(state, deps)
+
+    assert result["error"] is not None
+    assert "disk full" in result["error"]
+    # Charts were already rendered; their paths must survive the failure
+    assert len(result["visualization_paths"]) == 3
+    assert result["report_content"] != ""
+
+
+def test_generate_custom_report_empty_llm_response_writes_no_file(
+    dependencies, sample_dataframe
+):
+    """Test that an empty LLM response doesn't produce an empty report file"""
+    dependencies.llm.set_response("")
+
+    state = {
+        "csv_path": "test.csv",
+        "df": sample_dataframe,
+        "report_type": "custom",
+        "entity_id": None,
+        "custom_query": "What are the top priorities?",
+        "report_content": "",
+        "visualization_paths": [],
+        "error": None,
+    }
+
+    result = generate_custom_report_node(state, dependencies)
+
+    assert result["error"] is None
+    assert result.get("report_path") is None
+    assert dependencies.file_system.get_saved_files() == []
+
+
 def test_generate_custom_report_no_llm(sample_dataframe):
     """Test custom report without LLM configured"""
     deps = Dependencies(
@@ -749,6 +986,19 @@ def test_run_report_validation_missing_custom_query():
     assert "custom_query required" in result["error"]
 
 
+def test_run_report_rejects_unsafe_entity_id(dependencies):
+    """Test that entity_id with path separators or traversal is rejected"""
+    for bad_id in ["../evil", "a/b", "a\\b", ".", ".."]:
+        result = run_report(
+            csv_path="test.csv",
+            report_type="feed",
+            entity_id=bad_id,
+            deps=dependencies,
+        )
+        assert result["error"] is not None, f"expected rejection for {bad_id!r}"
+        assert "Invalid entity_id" in result["error"]
+
+
 def test_run_report_with_dependencies(dependencies):
     """Test run_report with provided dependencies"""
     test_df = create_test_dataframe()
@@ -765,6 +1015,8 @@ def test_run_report_with_dependencies(dependencies):
     assert result["error"] is None
     assert result["report_content"] != ""
     assert "FEED REPORT" in result["report_content"]
+    assert result["report_path"] is not None
+    assert result["report_path"].endswith(".txt")
     assert len(result["visualization_paths"]) == 3
 
 
